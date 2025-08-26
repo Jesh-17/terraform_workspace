@@ -332,9 +332,102 @@ resource "aws_instance" "my_instance" {
   }
 
   tags = {
-    Name = "my-ubuntu-ec2"
+    Name = "my-ubuntu-ec2-${count.index+1}" # count.index starts from 0
   }
 }
 
 ```
+```
+# outputs.tf for count
+output "ec2_public_ip"{
+  value = aws_instance.my_instance[*].public_ip
+}
+output "ec2_public_dns"{
+  value = aws_instance.my_instance[*].public_dns
+}
+output "ec2_private_ip"{
+  value = aws_instance.my_instance[*].private_ip # we can see attributes in terraform plan like public_ip...etc
+}
+```
+```bash
+terraform validate
+terraform plan
+terraform apply
+ssh -i terra-key-ec2 ubuntu@your_any_ec2_public_ip
+
+terraform destroy -auto-approve
+```
+---
+```
+# ec2 instance
+resource "aws_instance" "my_instance" {
+  for_each = tomap({  # meta argument
+     my_ubuntu_1 = "t2.micro"
+     my_ubuntu_2 = "t2.medium"
+  })
+  
+  depends_on = [aws_security_group.my_security_group, aws_key_pair.my_key]        # It is a meta argument, tells this resource block will be depends on the given resources in-order to create.
+
+  key_name = aws_key_pair.my_key.key_name
+  security_groups = [aws_security_group.my_security_group.name]
+  instance_type = each.value
+  ami           = var.ec2_ami_id  # amazon machine image
+  user_data = file("install_nginx.sh")    # It allows the script runs automatically when a new server first boots.
+  root_block_device{
+    volume_size = var.ec2_root_storage_size
+    volume_type = "gp3"
+
+  }
+
+  tags = {
+    Name = each.key
+  }
+}
+
+```
+```
+# outputs.tf for For each
+
+output "ec2_public_ip"{
+  value = {
+    for i in aws_instance.my_instance :  i.public_ip
+  }
+}
+output "ec2_public_dns"{
+  value = {
+    for i in aws_instance.my_instance :  i.public_dns
+  }
+}
+output "ec2_private_ip"{
+  value = {
+    for i in aws_instance.my_instance :  i.private_ip
+  }
+}
+
+output "ec2_public_ip"{
+  value = {
+    for idx,inst in aws_instance.my_instance : "my-ubuntu-ec2-${idx+1}" => inst.public_ip
+  }
+}
+output "ec2_public_dns"{
+  value = {
+    for idx,inst in aws_instance.my_instance : "my-ubuntu-ec2-${idx+1}" => inst.public_dns
+  }
+}
+output "ec2_private_ip"{
+  value = {
+    for idx,inst in aws_instance.my_instance : "my-ubuntu-ec2-${idx+1}" => inst.private_ip # we can see attributes in terraform plan like public_ip...etc
+  }
+}
+
+```
+```bash
+terraform validate
+terraform plan
+terraform apply
+ssh -i terra-key-ec2 ubuntu@your_any_ec2_public_ip
+
+terraform destroy -auto-approve
+```
+---
 
