@@ -430,4 +430,59 @@ ssh -i terra-key-ec2 ubuntu@your_any_ec2_public_ip
 terraform destroy -auto-approve
 ```
 ---
+```
+# variables.tf
+variable "ec2_instance_type"{
+  default = "t2.micro"
+  type = string
+}
+variable "ec2_default_root_storage_size"{
+  default = 10
+  type = number
+}
+variable "env"{
+  default = "prod"
+  type = string
+}
+variable "ec2_ami_id"{
+  default = "paste_ami_id"
+  type = string
+}
+
+```
+```
+# ec2 instance
+resource "aws_instance" "my_instance" {
+  for_each = tomap({  # meta argument
+     my_ubuntu_1 = "t2.micro"
+     my_ubuntu_2 = "t2.medium"
+  })
+  
+  depends_on = [aws_security_group.my_security_group, aws_key_pair.my_key]        # It is a meta argument, tells this resource block will be depends on the given resources in-order to create.
+
+  key_name = aws_key_pair.my_key.key_name
+  security_groups = [aws_security_group.my_security_group.name]
+  instance_type = each.value
+  ami           = var.ec2_ami_id  # amazon machine image
+  user_data = file("install_nginx.sh")    # It allows the script runs automatically when a new server first boots.
+  root_block_device{
+    volume_size = var.env == "prod" ? 20 : var.ec2_default_root_storage_size   # Ternary operator or conditional statement
+    volume_type = "gp3"
+  }
+
+  tags = {
+    Name = each.key
+  }
+}
+
+```
+```bash
+terraform validate
+terraform plan
+terraform apply
+ssh -i terra-key-ec2 ubuntu@your_any_ec2_public_ip
+
+terraform destroy -auto-approve
+```
+---
 
