@@ -268,6 +268,73 @@ terraform validate
 terraform plan
 terraform apply
 ssh -i terra-key-ec2 ubuntu@your_ec2_public_dns
+
+terraform destroy -auto-approve
+```
+---
+
+```sh
+# vi install_nginx.sh
+
+#!/bin/bash
+sudo apt-get update
+sudo apt-get install nginx -y
+sudo systemctl start nginx
+sudo systemctl enable nginx
+echo "<h1>The nginx is installed!!<h1/>" | sudo tee /var/www/html/index.html
+
+```
+```
+# ec2 instance
+resource "aws_instance" "my_instance" {
+  key_name = aws_key_pair.my_key.key_name
+  security_groups = [aws_security_group.my_security_group.name]
+  instance_type = var.ec2_instance_type
+  ami           = var.ec2_ami_id  # amazon machine image
+  user_data = file("install_nginx.sh")    # It allows the script runs automatically when a new server first boots.
+  root_block_device{
+    volume_size = var.ec2_root_storage_size
+    volume_type = "gp3"
+
+  }
+
+  tags = {
+    Name = "my-ubuntu-ec2"
+  }
+}
+
+```
+```bash
+terraform fmt
+terraform validate
+terraform plan  # 'plan.out' file would be created by the terraform to store the execution plan.
+terraform apply
+ssh -i terra-key-ec2 ubuntu@your_ec2_public_ip     # check nginx running or not: 'sudo systemctl status nginx' and if you go to the browser and give: http://your_ec2_public_ip  and you will see the application running 'The nginx is installed!!'
+
+terraform state list # list all the resources currently tracked in the state file
+terraform destroy --target=aws_instance.my_instance  # particular resource when we want to delete
+terraform destroy -auto-approve
 ```
 
+```
+# ec2 instance
+resource "aws_instance" "my_instance" {
+  count = 2   # meta argument
+  key_name = aws_key_pair.my_key.key_name
+  security_groups = [aws_security_group.my_security_group.name]
+  instance_type = var.ec2_instance_type
+  ami           = var.ec2_ami_id  # amazon machine image
+  user_data = file("install_nginx.sh")    # It allows the script runs automatically when a new server first boots.
+  root_block_device{
+    volume_size = var.ec2_root_storage_size
+    volume_type = "gp3"
+
+  }
+
+  tags = {
+    Name = "my-ubuntu-ec2"
+  }
+}
+
+```
 
