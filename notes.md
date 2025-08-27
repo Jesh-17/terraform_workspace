@@ -485,4 +485,60 @@ ssh -i terra-key-ec2 ubuntu@your_any_ec2_public_ip
 terraform destroy -auto-approve
 ```
 ---
+### Terraform State:
+- It keeps a record of all resources terraform has created, updated, or destroyed. It is stored in a file called terraform.tfstate (by default, in the project folder)
+- Without this terraform don't know what it already built.
+
+```bash
+# If you go to AWS and if you change the status of ec2 from running to stopped then, 
+terraform refresh # It updates your local state file to match the real infrastructure in the cloud, It only makes sure the state file is accurate
+terraform apply -refresh-only  # It only refreshes state, doesn't change resources.
+
+terraform state list  # lists all resources terraform is tracking in the state file
+terraform state show aws_key_pair.my_key   # show details of a resource.
+terraform state rm aws_key_pair.my_key    # removes a resource from a state without deleting it in the cloud. Here exmaple still the keypair exists in the AWS
+
+```
+### now you removed so terraform does not know about it so you need to import the resource from cloud
+```
+# just create the dummy resource block of it in the local
+
+resource aws_key_pair my_key {
+                    
+}
+
+```
+```bash
+terraform import aws_key_pair.my_key key_resource_id_give  # EC2->key pairs
+terraform state list
+terraform state show aws_key_pair.my_key
+```
+```
+# Now copy the correct important attributes from terraform state show into .tf file. Since terrafrom always considers .tf file as the source of truth 
+resource aws_key_pair my_key {
+  key_name   = "terra-key-ec2"
+  public_key= file("terra-key-ec2.pub")                  
+}
+
+```
+```bash
+terraform plan # if terraform shows no changes, your infrastructure matches the configuration
+```
+
+```
+# This is simple example
+resource "aws_instance" "my_new_instance"{
+  ami = "unknown"
+  instance_type = "unknown"
+}
+
+```
+```bash
+terraform import aws_instance.my_new_instance instance_id_give
+terraform state list
+terraform state show aws_instance.my_new_instance
+```
+---
+
+
 
