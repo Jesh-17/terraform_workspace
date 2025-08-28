@@ -509,7 +509,7 @@ resource aws_key_pair my_key {
 
 ```
 ```bash
-terraform import aws_key_pair.my_key key_resource_id_give  # EC2->key pairs
+terraform import aws_key_pair.my_key key_resource_name_give  # EC2->key pairs i.e terra-key-ec2
 terraform state list
 terraform state show aws_key_pair.my_key
 ```
@@ -539,6 +539,134 @@ terraform state list
 terraform state show aws_instance.my_new_instance
 ```
 ---
+### What is state conflict
+- Terraform state conflict: if two people editing the same state file at once then state conflict would be occured. It is sloved by using ```'state locking'```
+- Case 1:
+  - local state (default):
+    - terraform.tfstate is stored on your system. if you push code to github, your teammate has their own state file on their laptop.
+    - Problem- Terraform does not know what the other person did this may results in duplicate or delete resources on cloud. 
+    - Since the .tfstate file is local, there is no lock. So both you and your team mate apply changes and conflict occur(state file overwritten)
+- Case 2:
+  - Remote Backend(S3 without locking):
+    - If state is stored in S3 bucket. Multiple people/CI pipelines can access the same state. if two people run terraform apply at the same time then conflicts occurs(last write wins and it is dangerous)
+- Solution: With S3 + DynamoDB statefile locking & release mechanism- Terraform blocks second person until the first person finishes. So whenever first person tries the change the statefile in S3 bucket, a trigger will go to the DynamoDB and Here a LockID would be generated with info. Till this lock ID exists second person or other person won't allow to access the State file in S3 bucket. Means When the first person's terraform apply finishes, terraform automatically removes the lock entry and then others can run terraform safely.
 
+Note:
+  - DynamoDB how the data is stored? key-value way(json)
+    - Table: like a folder that holds all the data
+    - Item: A single record(like a row in sql)
+    - Attributes: like columns in sql
+    - you must define a primary key called Partition key or hash_key. Attributes you define are part of primary key 
+
+  Eg:
+  
+    [
+      {
+        "UserID": "U123",
+        "Name": "Ram"
+      },
+      {
+        "UserID": "U124",
+        "Name": "Max"
+      }
+    ]
+
+    Final Table:
+      UserID Name
+      U123   Ram
+      U124   Max
+
+```
+# vi s3.tf
+
+resource "aws_s3_bucket" "remote_s3" {
+  bucket = "my-tf-state-bucket"
+
+  tags = {
+    Name        = "my-tf-state-bucket"
+    # Environment = "Dev"
+  }
+}
+
+```
+```
+# vi dynamodb.tf
+
+resource "aws_dynamodb_table" "basic-dynamodb-table" {
+  name           = "my-tf-state-dynamodb-table"  # Table name
+  # billing_mode   = "PROVISIONED"    # you fix how many reads/writes per second you want. You pay for this capacity whether you use it or not. If you need more than this, DynamoDB will block extra requests.
+  # read_capacity  = 20
+  # write_capacity = 20
+  billing_mode   = "PAY_PER_REQUEST"  # you don't set any limits, Aws automatically adjusts to your traffic. You pay only for what you use.
+  hash_key       = "LockId"  # tells table's primary key is LockID and this column use as primary key
+
+  attribute {
+    name = "LockId"  # Terraform also needs to tell AWS what type LockID is so we should define an attribute block. So It defines the datatype of the above column.
+    type = "S"   # type is string, N (number), B (binary).
+  }
+
+  tags = {
+    Name        = "my-tf-state-dynamodb-table"
+    # Environment = "production"
+  }
+}
+
+```
+```
+# vi terraform.tf
+
+terraform {
+  required_providers {
+    aws = {
+      source = "hashicorp/aws"
+      version = "6.10.0"
+    }
+  }
+
+  backend "s3"{
+    bucket = "my-tf-state-bucket"
+    key    = "terraform.tfstate"     # path with statefile name in the s3 bucket
+    region = "us-east-2"
+    dynamodb_table = "my-tf-state-dynamodb-table"
+  }
+}
+
+
+
+```
+```
+# vi providers.tf
+
+provider "aws" {
+  # Configuration options
+  region = "us-east-2"
+}
+
+```
+```bash
+terraform init
+terraform plan
+terraform apply
+
+terraform state list
+terraform refresh
+
+# Note: Get terraform state from backup just renaming the backup ex: terraform.tfstate.backup->terraform.tfstate, In local backend terraform always keeps a .backup file of your last state for safety.
+terraform state list
+terraform apply
+
+# Now you can delete the statefile and  as well as backups in local backend, but still latest statefile is sync and connected in S3 bucket (Remote backend)
+terraform state list  # Still it shows the resources state since it is in s3 bucket
+```
+### Now, in AWS if you go: DynamoDB->Tables->my-tf-state-dynamodb-table, Amazon S3->Buckets->my-tf-state-bucket->terraform.tfstate
+
+```bash
+# Person A
+terraform apply  # Person A applied then LockID would be generated in DynamoDB.
+```
+```bash
+# Person B
+terraform apply  # Person B applied then he is waiting via saying  "Lock info like who is doing + Terraform acquires a state lock to protect the state from being written by mutiple users at the same time ", once person A finishes then only person B can modify the state file and that time LockID under Info of person A won't be available. We can see LockID under Info in the AWS path: DynamoDB->Explore items->my-tf-state-dynamodb-table ex: {"ID":".....",..}
+```
 
 
