@@ -669,4 +669,22 @@ terraform apply  # Person A applied then LockID would be generated in DynamoDB.
 terraform apply  # Person B applied then he is waiting via saying  "Lock info like who is doing + Terraform acquires a state lock to protect the state from being written by mutiple users at the same time ", once person A finishes then only person B can modify the state file and that time LockID under Info of person A won't be available. We can see LockID under Info in the AWS path: DynamoDB->Explore items->my-tf-state-dynamodb-table ex: {"ID":".....",..}
 ```
 
+### Terraform workspace
+- 
+```bash
+terraform workspace list # list all workspaces available
+terraform workspace show # check current workspace
 
+terraform workspace new dev # new workspace dev created in local (it is completed isolated)
+terraform state list
+
+terraform workspace select default   # now switched to default workspace
+terraform state list
+
+```
+
+### Terraform modules
+- 
+```bash
+
+```
